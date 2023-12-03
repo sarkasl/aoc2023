@@ -1,15 +1,15 @@
 import gleam/io
 import gleam/string
 import simplifile
-import day1.{main as m}
+import day3.{main as m}
 
 pub fn main() {
   io.println("Running aoc")
 
   // let input =
-  //   "two1nine\neightwothree\nabcone2threexyz\nxtwone3four\n4nineeightseven2\nzoneight234\n7pqrstsixteen\n"
+  //   "467..114..\n...*......\n..35..633.\n......#...\n617*......\n.....+.58.\n..592.....\n......755.\n...$.*....\n.664.598.."
 
-  let assert Ok(input) = simplifile.read("inputs/day1.txt")
+  let assert Ok(input) = simplifile.read("inputs/day3.txt")
 
   m(string.trim(input))
   Nil
