@@ -3,6 +3,12 @@ import gleam/list
 import gleam/io
 import gleam/int
 
+type Value {
+  Number(value: Int, tag: Int)
+  Gear
+  Other
+}
+
 fn is_digit(grapheme: String) -> Bool {
   case grapheme {
     "0" | "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9" -> True
@@ -10,56 +16,47 @@ fn is_digit(grapheme: String) -> Bool {
   }
 }
 
-fn is_symbol(grapheme: String) -> Bool {
-  case is_digit(grapheme), grapheme {
-    True, _ -> False
-    False, "." -> False
-    False, _ -> True
-  }
-}
-
 fn take_number(
-  line: List(#(String, Bool)),
-  is_part: Bool,
+  line: List(String),
   digits_acc: List(String),
-) -> #(List(#(String, Bool)), Bool, List(String)) {
+) -> #(List(String), List(String)) {
   case line {
-    [#(value, value_is_part), ..rest] ->
-      case is_digit(value), is_part || value_is_part {
-        False, _ -> #(line, is_part, digits_acc)
-        True, is_part -> take_number(rest, is_part, [value, ..digits_acc])
-      }
-    _ -> #(line, is_part, digits_acc)
-  }
-}
-
-fn do_count_parts(line: List(#(String, Bool)), running_sum: Int) -> Int {
-  case line {
-    [] -> running_sum
-    [#(value, _), ..rest] ->
+    [value, ..rest] ->
       case is_digit(value) {
-        True -> {
-          let #(rest, is_part, digits_acc) = take_number(line, False, [])
-          case is_part {
-            True -> {
-              let assert Ok(number) =
-                digits_acc
-                |> list.reverse
-                |> string.concat
-                |> int.parse
+        False -> #(line, digits_acc)
+        True -> take_number(rest, [value, ..digits_acc])
+      }
+    _ -> #(line, digits_acc)
+  }
+}
 
-              do_count_parts(rest, running_sum + number)
-            }
-            False -> do_count_parts(rest, running_sum)
-          }
+fn do_parse_line(line: List(String), acc: List(Value)) -> List(Value) {
+  case line {
+    [] -> list.reverse(acc)
+    [value, ..rest] ->
+      case value, is_digit(value) {
+        "*", _ -> do_parse_line(rest, [Gear, ..acc])
+        _, True -> {
+          let #(rest, digits_acc) = take_number(line, [])
+          let assert Ok(number) =
+            digits_acc
+            |> list.reverse
+            |> string.concat
+            |> int.parse
+          let result = Number(value: number, tag: int.random(0, 10_000_000))
+          do_parse_line(
+            rest,
+            list.concat([list.repeat(result, list.length(digits_acc)), acc]),
+          )
         }
-        False -> do_count_parts(rest, running_sum)
+
+        _, False -> do_parse_line(rest, [Other, ..acc])
       }
   }
 }
 
-fn count_parts(line: List(#(String, Bool))) -> Int {
-  do_count_parts(line, 0)
+fn parse_line(line: List(String)) -> List(Value) {
+  do_parse_line(line, [])
 }
 
 pub fn main(input: String) {
@@ -71,22 +68,53 @@ pub fn main(input: String) {
   let padding = string.repeat(".", string.length(first_line))
 
   let lines = list.append([padding, ..lines], [padding])
+  let lines =
+    lines
+    |> list.map(string.to_graphemes)
+    |> list.map(list.append(_, ["."]))
+    |> list.map(list.prepend(_, "."))
 
   let sum =
     lines
-    |> list.map(string.to_graphemes)
+    |> list.map(parse_line)
     |> list.window(3)
     |> list.map(list.transpose)
-    |> list.map(list.prepend(_, [".", ".", "."]))
-    |> list.map(list.append(_, [[".", ".", "."]]))
     |> list.map(list.window(_, 3))
     |> list.map(list.map(_, list.flatten))
-    |> list.map(list.map(_, fn(window) {
-      let assert [_, _, _, _, value, ..] = window
-      #(value, list.any(window, is_symbol))
-    }))
-    |> list.map(count_parts)
+    |> list.map(list.fold(
+      _,
+      0,
+      fn(sum, window) {
+        let assert [_, _, _, _, value, ..] = window
+        let unique_numbers =
+          window
+          |> list.filter(fn(value) {
+            case value {
+              Number(_, _) -> True
+              _ -> False
+            }
+          })
+          |> list.unique
+        let number_gear_ratio =
+          list.fold(
+            unique_numbers,
+            1,
+            fn(acc, number) {
+              case number {
+                Number(value, _) -> acc * value
+                _ -> panic
+              }
+            },
+          )
+
+        case value, list.length(unique_numbers) {
+          Gear, 2 -> sum + number_gear_ratio
+          _, _ -> sum
+        }
+      },
+    ))
     |> list.fold(0, int.add)
 
   io.debug(sum)
+  Nil
 }
