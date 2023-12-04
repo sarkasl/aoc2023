@@ -125,6 +125,7 @@ pub fn main(input: String) {
     input
     |> string.split("\n")
 
+  part1(lines)
   part2(lines)
 }
 // Card 209:  2 10 11 47 25 81 75 61 27  4 | 79 45 43 29 55 16 91 68 88 52 90 21 13 37 59 31  5  1 14 17 86 84 64 60 70
