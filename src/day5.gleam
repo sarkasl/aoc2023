@@ -26,6 +26,15 @@ fn get_mapper(mappings: List(Mapping)) -> fn(Int) -> Int {
   }
 }
 
+fn compose_mappers(mappers: List(fn(Int) -> Int)) -> fn(Int) -> Int {
+  let mapper_apply = fn(n, mapper) { mapper(n) }
+  fn(n) { list.fold(mappers, n, mapper_apply) }
+}
+
+fn reverse_mapping(mapping: Mapping) -> Mapping {
+  Mapping(mapping.dest_start, mapping.source_start, mapping.size)
+}
+
 fn parse_number_series(numbers: String) -> List(Int) {
   let vals =
     numbers
@@ -82,23 +91,21 @@ fn parse(
   )
 }
 
-fn map(mappers: List(fn(Int) -> Int), n: Int) -> Int {
-  list.fold(mappers, n, fn(val, func) { func(val) })
-}
-
 fn part1(input: String) {
   let #(seeds, ss, sf, fw, wl, lt, th, hl) = parse(input)
 
-  let mappers =
+  let mapper =
     [ss, sf, fw, wl, lt, th, hl]
     |> list.map(get_mapper)
+    |> compose_mappers
 
   let lowest =
     seeds
-    |> list.map(map(mappers, _))
+    |> list.map(mapper)
     |> list.reduce(int.min)
     |> io.debug
 
+  io.debug(lowest)
   Nil
 }
 
@@ -123,36 +130,59 @@ fn part2(input: String) {
       #(start, stop)
     })
 
-  let mappers =
-    [ss, sf, fw, wl, lt, th, hl]
+  let layers = [ss, sf, fw, wl, lt, th, hl]
+
+  let layers_backwards =
+    layers
+    |> list.reverse
+    |> list.map(list.map(_, reverse_mapping))
+
+  let forward_mapper =
+    layers
     |> list.map(get_mapper)
+    |> compose_mappers
 
-  let assert Ok(#(seed0, loc0)) =
-    step_range(4_294_967_296, 1000)
-    |> iterator.filter(fn(n) { list.any(seed_ranges, is_in_range(n, _)) })
-    |> iterator.map(fn(n) { #(n, map(mappers, n)) })
-    |> iterator.reduce(fn(acc, pair) {
-      case acc.1 <= pair.1 {
-        True -> acc
-        False -> pair
-      }
-    })
+  let get_points_of_interest = fn(layer_mappings) {
+    layer_mappings
+    |> list.map(fn(mapping: Mapping) { mapping.source_start })
+  }
 
-  let assert Ok(#(seed1, loc1)) =
-    iterator.range(seed0 - 20_000, seed0 + 20_000)
-    |> iterator.filter(fn(n) { list.any(seed_ranges, is_in_range(n, _)) })
-    |> iterator.map(fn(n) { #(n, map(mappers, n)) })
-    |> iterator.reduce(fn(acc, pair) {
-      case acc.1 <= pair.1 {
-        True -> acc
-        False -> pair
-      }
-    })
+  let points_of_interest =
+    layers_backwards
+    |> list.fold(
+      [],
+      fn(points, layer_mappings) {
+        let poi = get_points_of_interest(layer_mappings)
+        let mapper = get_mapper(layer_mappings)
 
-  io.debug(#(seed1, loc1))
+        list.append(poi, points)
+        |> list.map(mapper)
+      },
+    )
+
+  let seed_points_of_interest =
+    seed_ranges
+    |> list.map(fn(range) { range.0 })
+
+  let points_of_interest =
+    list.append(seed_points_of_interest, points_of_interest)
+
+  let assert Ok(min) =
+    points_of_interest
+    |> list.filter(fn(n) { list.any(seed_ranges, is_in_range(n, _)) })
+    |> list.map(forward_mapper)
+    |> list.reduce(int.min)
+
+  points_of_interest
+  |> list.filter(fn(n) { list.any(seed_ranges, is_in_range(n, _)) })
+  |> list.length
+  |> io.debug
+
+  io.debug(list.length(points_of_interest))
   Nil
 }
 
 pub fn main(input: String) {
+  // part1(input)
   part2(input)
 }
