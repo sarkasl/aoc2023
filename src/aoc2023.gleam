@@ -1,21 +1,26 @@
 import gleam/io
 import gleam/string
 import simplifile
-import day7.{main as m}
+import day8.{main as m}
 
 pub fn main() {
   io.println("Running aoc")
 
 //   let input =
 //     "
-// 32T3K 765
-// T55J5 684
-// KK677 28
-// KTJJT 220
-// QQQJA 483
+// LR
+
+// 11A = (11B, XXX)
+// 11B = (XXX, 11Z)
+// 11Z = (11B, XXX)
+// 22A = (22B, XXX)
+// 22B = (22C, 22C)
+// 22C = (22Z, 22Z)
+// 22Z = (22B, 22B)
+// XXX = (XXX, XXX)
 //     "
 
-  let assert Ok(input) = simplifile.read("inputs/day7.txt")
+  let assert Ok(input) = simplifile.read("inputs/day8.txt")
 
   m(string.trim(input))
   Nil

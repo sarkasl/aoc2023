@@ -103,14 +103,16 @@ fn score_amounts_p2(cards: List(Int)) -> Int {
 }
 
 fn high_card_compare(a: #(List(Int), Int), b: #(List(Int), Int)) -> Order {
-  list.zip(a.0, b.0)
-  |> list.find_map(fn(cards) {
+  let compare_card = fn(cards) {
     let #(a, b) = cards
     case int.compare(a, b) {
       Eq -> Error(Nil)
       res -> Ok(res)
     }
-  })
+  }
+
+  list.zip(a.0, b.0)
+  |> list.find_map(compare_card)
   |> result.unwrap(Eq)
 }
 
@@ -150,5 +152,28 @@ pub fn main(input: String) {
     |> string.split("\n")
 
   // part1(lines)
-  part2(lines)
+  // part2(lines)
+
+  let formatter = fn(a) {
+    let #(l, _) = a
+    let char_mapper = fn(n) {
+      case n {
+        14 -> "A"
+        13 -> "K"
+        12 -> "Q"
+        1 -> "J"
+        10 -> "T"
+        _ -> int.to_string(n)
+      }
+    }
+    l
+    |> list.map(char_mapper)
+    |> string.concat
+  }
+
+  lines
+  |> list.map(parse_line(_, 2))
+  |> list.sort(hand_compare_p2)
+  |> list.map(formatter)
+  |> list.each(io.println)
 }
