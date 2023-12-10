@@ -97,6 +97,7 @@ fn get_cycle(map: Map, instructions: Iterator(Movement), starting_pos: String) {
 
 pub fn main(input: String) {
   let #(map, instructions, starting_positions) = parse(input)
+  io.debug(map)
 
   starting_positions
   |> list.map(get_cycle(map, instructions, _))
