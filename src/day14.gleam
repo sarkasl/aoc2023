@@ -9,6 +9,7 @@ import gleam/bit_array
 import gleam/crypto
 import gleam/dict.{type Dict}
 import gleam/result
+import gleam_community/maths/elementary.{logarithm_2}
 
 type Dish =
   List(List(String))
@@ -132,8 +133,27 @@ fn hyperloglog_count(registers: Registers) -> Int {
     acc +. { 1.0 /. pow }
   }
 
+  let zeros = {
+    use acc, i <- iterator.fold(iterator.range(0, 255), 0)
+    case read_register(registers, i) {
+      0 -> acc + 1
+      _ -> acc
+    }
+  }
+
   let estimate = { 0.7182726 *. 65_536.0 } /. count
-  float.round(estimate)
+
+  let corrected = case estimate <. 640.0, zeros, estimate >. 143_165_576.5 {
+    True, 0, False -> estimate
+    True, _, False -> {
+      let assert Ok(log) = logarithm_2(256.0 /. int.to_float(zeros))
+      256.0 *. log
+    }
+    // False, _, True -> todo
+    _, _, _ -> estimate
+  }
+
+  float.round(corrected)
 }
 
 type State {
@@ -171,7 +191,7 @@ fn run_cycles(dish: List(List(String))) -> List(List(String)) {
   let tumbled = {
     // 999_999_999
     use state, i <- iterator.fold_until(
-      iterator.range(0, 500),
+      iterator.range(0, 100_000),
       Settle(pointing_north, dict.new()),
     )
 
