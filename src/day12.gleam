@@ -3,10 +3,11 @@ import gleam/io
 import gleam/string
 import gleam/int
 import gleam/result
+import gleam/dict.{type Dict}
 import gleam/iterator
 
 type Line {
-  Line(str: String, runs: List(Int), count: Int)
+  Line(conds: List(String), numbers: List(Int))
 }
 
 fn parse_line(line: String) -> Line {
@@ -15,114 +16,105 @@ fn parse_line(line: String) -> Line {
     |> string.split(" ")
     |> list.map(string.trim)
 
-  let str = string.repeat(str_i, 5)
-
   let assert Ok(numbers_i) =
     numbers_str
     |> string.split(",")
     |> list.map(int.parse)
     |> result.all
 
+  let str =
+    str_i
+    |> list.repeat(5)
+    |> list.intersperse("?")
+    |> string.concat
   let numbers = list.flatten(list.repeat(numbers_i, 5))
+  // let str = str_i
+  // let numbers = numbers_i
 
-  let count =
-    str
-    |> string.to_graphemes
-    |> list.filter(fn(char) { char == "?" })
-    |> list.length
-
-  Line(str, numbers, count)
+  Line(string.to_graphemes(str), numbers)
 }
 
-fn do_combine_with_random(
-  str_rem: List(String),
-  random_rem: List(String),
-  acc: List(String),
-) -> String {
-  case str_rem {
-    [] -> string.concat(list.reverse(acc))
-    [char, ..rest] ->
-      case char {
-        "?" -> {
-          let assert [first_random, ..rest_random] = random_rem
-          do_combine_with_random(rest, rest_random, [first_random, ..acc])
-        }
-        _ -> do_combine_with_random(rest, random_rem, [char, ..acc])
+type Branch {
+  Branch(remaining: List(Int), pre: Int, weight: Int)
+}
+
+fn resolve_empty(branch: Branch) -> Result(#(List(Int), Int), Nil) {
+  case branch.pre, branch.remaining {
+    0, _ -> Ok(#(branch.remaining, branch.pre))
+    _, [] -> Error(Nil)
+    _, [next, ..rest] ->
+      case branch.pre == next {
+        True -> Ok(#(rest, 0))
+        False -> Error(Nil)
       }
   }
 }
 
-fn combine_with_random(str: String, random: List(String)) -> String {
-  do_combine_with_random(string.to_graphemes(str), random, [])
+fn resolve_full(branch: Branch) -> Result(#(List(Int), Int), Nil) {
+  case branch.remaining {
+    [] -> Error(Nil)
+    [next, ..] ->
+      case next >= branch.pre + 1 {
+        True -> Ok(#(branch.remaining, branch.pre + 1))
+        False -> Error(Nil)
+      }
+  }
 }
 
-fn int_to_str(n: Int, l: Int) -> List(String) {
-  n
-  |> int.to_base2
-  |> string.pad_left(l, "0")
-  |> string.to_graphemes
-  |> list.map(fn(digit) {
-    case digit {
-      "0" -> "."
-      "1" -> "#"
+fn count_in(
+  counts: Dict(a, Int),
+  weight: Int,
+  res: Result(a, Nil),
+) -> Dict(a, Int) {
+  case res {
+    Ok(key) -> {
+      let count = result.unwrap(dict.get(counts, key), 0)
+      dict.insert(counts, key, count + weight)
     }
-  })
+    Error(_) -> counts
+  }
 }
 
-fn get_combinations(total_length: Int, hash_count: Int) -> List(String) {
-  io.debug(#(total_length, hash_count))
-  let range = list.range(0, total_length - 1)
-  let combs = list.combinations(range, hash_count)
+fn get_option_count(line: Line) -> Int {
+  // io.debug(line)
+
+  let final_branches = {
+    use branches, cond <- list.fold(line.conds, [Branch(line.numbers, 0, 1)])
+    // io.debug(#(branches, cond))
+
+    let counts = {
+      use counts, branch <- list.fold(branches, dict.new())
+      case cond {
+        "." -> count_in(counts, branch.weight, resolve_empty(branch))
+        "#" -> count_in(counts, branch.weight, resolve_full(branch))
+        "?" -> {
+          counts
+          |> count_in(branch.weight, resolve_empty(branch))
+          |> count_in(branch.weight, resolve_full(branch))
+        }
+      }
+    }
+
+    {
+      use #(#(remaining, pre), weight) <- list.map(dict.to_list(counts))
+      Branch(remaining, pre, weight)
+    }
+  }
+  // io.debug(final_branches)
 
   {
-    use comb <- list.map(combs)
-    {
-      use i <- list.map(range)
-      case list.contains(comb, i) {
-        True -> "#"
-        False -> "."
-      }
+    use acc, branch <- list.fold(final_branches, 0)
+    case branch.remaining, branch.pre {
+      [], 0 -> acc + branch.weight
+      _, 0 -> acc
+      [next], _ ->
+        case next == branch.pre {
+          True -> acc + branch.weight
+          False -> acc
+        }
+      _, _ -> acc
     }
   }
-  |> list.map(string.concat)
-}
-
-fn get_possible(line: Line) -> List(List(String)) {
-  let hash_count_str =
-    line.str
-    |> string.to_graphemes
-    |> list.filter(fn(c) { c == "#" })
-    |> list.length
-
-  let hash_count = list.fold(line.runs, 0, int.add) - hash_count_str
-
-  get_combinations(line.count, hash_count)
-  |> list.map(string.to_graphemes)
-  // |> io.debug
-}
-
-fn check_possible(str: String, random: List(String), runs: List(Int)) -> Bool {
-  let final_str = combine_with_random(str, random)
-
-  let zipped =
-    final_str
-    |> string.split(".")
-    |> list.filter(fn(run) { string.length(run) != 0 })
-    |> list.map(string.length)
-    |> list.strict_zip(runs)
-
-  case zipped {
-    Ok(zipped) -> list.all(zipped, fn(t) { t.0 == t.1 })
-    Error(_) -> False
-  }
-}
-
-fn get_count(line: Line) -> Int {
-  let possible = get_possible(line)
-
-  possible
-  |> list.filter(check_possible(line.str, _, line.runs))
-  |> list.length
 }
 
 pub fn main(input: String) {
@@ -132,11 +124,8 @@ pub fn main(input: String) {
     |> list.map(parse_line)
 
   lines
-  |> list.map(fn(line) {
-    let count = get_count(line)
-    io.debug(#(line.str, count))
-    count
-  })
+  |> list.map(get_option_count)
+  // |> list.each(io.debug)
   |> list.fold(0, int.add)
   |> io.debug
 
