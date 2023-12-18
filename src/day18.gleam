@@ -39,54 +39,26 @@ fn parse_instr2(line: String) -> Instr {
   }
 }
 
-fn get_polygon(instrs: List(Instr)) -> List(#(Int, Int)) {
-  let assert Ok(first) = list.first(instrs)
-  let circular =
-    instrs
-    |> list.append([first])
-    |> list.window_by_2
+fn get_area(instrs: List(Instr)) -> Int {
+  let #(sum, lenght, _) = {
+    use #(acc, lenght, #(x, y)), instr <- list.fold(instrs, #(0, 0, #(0, 0)))
 
-  {
-    use #(acc, #(x, y)), #(instr, next) <- list.fold(circular, #([], #(0, 0)))
-
-    let pos = case instr {
-      Right(amount) -> #(x + 2 * amount, y)
-      Left(amount) -> #(x - 2 * amount, y)
-      Down(amount) -> #(x, y + 2 * amount)
-      Up(amount) -> #(x, y - 2 * amount)
+    let #(x_next, y_next) = case instr {
+      Right(amount) -> #(x + amount, y)
+      Left(amount) -> #(x - amount, y)
+      Down(amount) -> #(x, y + amount)
+      Up(amount) -> #(x, y - amount)
     }
 
-    let offset = case instr, next {
-      Right(_), Down(_) | Down(_), Right(_) -> #(1, -1)
-      Right(_), Up(_) | Up(_), Right(_) -> #(-1, -1)
-      Left(_), Down(_) | Down(_), Left(_) -> #(1, 1)
-      Left(_), Up(_) | Up(_), Left(_) -> #(-1, 1)
-    }
+    let lenght = lenght + instr.amount
+    let acc = acc + { { x + x_next } * { y - y_next } }
 
-    #([#(pos.0 + offset.0, pos.1 + offset.1), ..acc], pos)
-  }.0
-}
-
-fn polygon_area(polygon: List(#(Int, Int))) -> Int {
-  let assert Ok(last) = list.last(polygon)
-  let circular =
-    [last, ..polygon]
-    |> list.window_by_2
-
-  let sum = {
-    use acc, #(#(x, y), #(x1, y1)) <- list.fold(circular, 0)
-    acc + { { x + x1 } * { y - y1 } }
+    #(acc, lenght, #(x_next, y_next))
   }
-  int.absolute_value(sum) / 2
-}
 
-fn get_area(instrs: List(Instr)) {
-  let area_x4 =
-    instrs
-    |> get_polygon
-    |> polygon_area
+  let shoelace = int.absolute_value(sum) / 2
 
-  area_x4 / 4
+  shoelace + lenght / 2 + 1
 }
 
 pub fn main(input: String) {

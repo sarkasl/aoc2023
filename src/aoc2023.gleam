@@ -6,8 +6,8 @@ import day18.{main as m}
 pub fn main() {
   io.println("Running aoc")
 
-    let input =
-      "
+  let input =
+    "
 R 6 (#70c710)
 D 5 (#0dc571)
 L 2 (#5713f0)
