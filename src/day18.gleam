@@ -77,7 +77,7 @@ fn polygon_area(polygon: List(#(Int, Int))) -> Int {
     use acc, #(#(x, y), #(x1, y1)) <- list.fold(circular, 0)
     acc + { { x + x1 } * { y - y1 } }
   }
-  sum / 2
+  int.absolute_value(sum) / 2
 }
 
 fn get_area(instrs: List(Instr)) {
