@@ -1,5 +1,5 @@
 import gleam/string
-import gleam/list.{Continue, Stop}
+import gleam/list.{Continue}
 import gleam/io
 import gleam/iterator
 import gleam/int

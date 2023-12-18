@@ -4,7 +4,6 @@ import gleam/string
 import gleam/int
 import gleam/result
 import gleam/dict.{type Dict}
-import gleam/iterator
 
 type Line {
   Line(conds: List(String), numbers: List(Int))
@@ -76,7 +75,7 @@ fn count_in(
 }
 
 fn get_option_count(line: Line) -> Int {
-  // io.debug(line)
+  io.debug(#(string.concat(line.conds), line.numbers))
 
   let final_branches = {
     use branches, cond <- list.fold(line.conds, [Branch(line.numbers, 0, 1)])
@@ -125,7 +124,6 @@ pub fn main(input: String) {
 
   lines
   |> list.map(get_option_count)
-  // |> list.each(io.debug)
   |> list.fold(0, int.add)
   |> io.debug
 

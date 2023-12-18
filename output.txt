@@ -1,0 +1,7 @@
+[0m[38;5;13m  Compiling[0m aoc2023
+[0m[38;5;13m   Compiled[0m in 0.18s
+[0m[38;5;13m    Running[0m aoc2023.main
+Running aoc
+
+BREAK: (a)bort (A)bort with dump (c)ontinue (p)roc info (i)nfo
+       (l)oaded (v)ersion (k)ill (D)b-tables (d)istribution
