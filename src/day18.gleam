@@ -41,7 +41,7 @@ fn parse_instr2(line: String) -> Instr {
 
 fn get_area(instrs: List(Instr)) -> Int {
   let #(sum, lenght, _) = {
-    use #(acc, lenght, #(x, y)), instr <- list.fold(instrs, #(0, 0, #(0, 0)))
+    use #(sum, lenght, #(x, y)), instr <- list.fold(instrs, #(0, 0, #(0, 0)))
 
     let #(x_next, y_next) = case instr {
       Right(amount) -> #(x + amount, y)
@@ -51,9 +51,9 @@ fn get_area(instrs: List(Instr)) -> Int {
     }
 
     let lenght = lenght + instr.amount
-    let acc = acc + { { x + x_next } * { y - y_next } }
+    let sum = sum + { { x + x_next } * { y - y_next } }
 
-    #(acc, lenght, #(x_next, y_next))
+    #(sum, lenght, #(x_next, y_next))
   }
 
   let shoelace = int.absolute_value(sum) / 2
