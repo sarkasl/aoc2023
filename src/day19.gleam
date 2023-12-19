@@ -66,43 +66,56 @@ fn cut(range: Range, cut: Cut) -> Option(Range) {
 }
 
 fn get_cuts(conds: String) -> Dict(String, List(List(Cut))) {
+  let reverse_map =
+    {
+      use #(map, negative), cond <- list.fold(
+        string.split(conds, ","),
+        #(dict.new(), []),
+      )
+
+      case string.split(cond, ":") {
+        [dest] -> {
+          let llc = result.unwrap(dict.get(map, dest), [])
+          #(dict.insert(map, dest, [negative, ..llc]), [])
+        }
+        [c, dest] -> {
+          let llc = result.unwrap(dict.get(map, dest), [])
+
+          let assert Ok(n) =
+            string.drop_left(c, 2)
+            |> int.parse
+
+          let comp = case string.slice(c, 0, 1) {
+            "x" -> Xs
+            "m" -> Ms
+            "a" -> As
+            "s" -> Ss
+          }
+
+          let #(new_cut, inverse_cut) = case string.slice(c, 1, 1) {
+            ">" -> #(Gt(comp, n), Lt(comp, n + 1))
+            "<" -> #(Lt(comp, n), Gt(comp, n - 1))
+          }
+
+          #(
+            dict.insert(map, dest, [[new_cut, ..negative], ..llc]),
+            [inverse_cut, ..negative],
+          )
+        }
+      }
+    }.0
+
   {
-    use #(map, negative), cond <- list.fold(
-      string.split(conds, ","),
-      #(dict.new(), []),
-    )
+    use #(key, llc) <- list.map(dict.to_list(reverse_map))
 
-    case string.split(cond, ":") {
-      [dest] -> {
-        let llc = result.unwrap(dict.get(map, dest), [])
-        #(dict.insert(map, dest, [negative, ..llc]), [])
-      }
-      [c, dest] -> {
-        let llc = result.unwrap(dict.get(map, dest), [])
+    let llc =
+      llc
+      |> list.reverse
+      |> list.map(list.reverse)
 
-        let assert Ok(n) =
-          string.drop_left(c, 2)
-          |> int.parse
-
-        let comp = case string.slice(c, 0, 1) {
-          "x" -> Xs
-          "m" -> Ms
-          "a" -> As
-          "s" -> Ss
-        }
-
-        let #(new_cut, inverse_cut) = case string.slice(c, 1, 1) {
-          ">" -> #(Gt(comp, n), Lt(comp, n + 1))
-          "<" -> #(Lt(comp, n), Gt(comp, n - 1))
-        }
-
-        #(
-          dict.insert(map, dest, [[new_cut, ..negative], ..llc]),
-          [inverse_cut, ..negative],
-        )
-      }
-    }
-  }.0
+    #(key, llc)
+  }
+  |> dict.from_list
 }
 
 fn parse(input: String) -> Map {
@@ -236,79 +249,74 @@ fn recombine(all: List(a), combinations: List(List(a))) -> List(List(a)) {
 
 pub fn main(input: String) {
   let map = parse(input)
-  // let #(_, res) = evaluate_ranges(map, dict.new(), "A")
-  // let #(_, res2) = evaluate_ranges(map, dict.new(), "R")
+  let #(_, res) = evaluate_ranges(map, dict.new(), "A")
+  let #(_, res2) = evaluate_ranges(map, dict.new(), "R")
 
-  // let intersecting = {
-  //   use acc, range <- list.fold(res, 0)
-  //   let intersecting =
-  //     {
-  //       use other <- list.map(res)
-  //       case range == other, intersection_size([range, other]) {
-  //         _, 0 -> 0
-  //         False, _ -> 1
-  //         True, _ -> 0
-  //       }
+  let intersecting = {
+    use acc, range <- list.fold(res, 0)
+    let intersecting =
+      {
+        use other <- list.map(res)
+        case range == other, intersection_size([range, other]) {
+          _, 0 -> 0
+          False, _ -> 1
+          True, _ -> 0
+        }
+      }
+      |> list.fold(0, int.add)
+
+    case intersecting {
+      0 -> acc
+      _ -> acc + 1
+    }
+  }
+
+  let sum =
+    res
+    |> list.map(range_size)
+    |> list.fold(0, int.add)
+
+  res
+  |> list.each(io.debug)
+
+  io.debug(sum)
+
+  // {
+  //   use #(key, space) <- list.each(dict.to_list(map))
+  //   io.println_error("")
+  //   io.debug(key)
+  //   io.debug(space.leads_out)
+
+  //   let lcs =
+  //     space.leads_out
+  //     |> dict.values
+  //     |> list.flatten
+
+  //   let sum = {
+  //     use acc, lc <- list.fold(lcs, 0)
+  //     io.debug(lc)
+
+  //     let assert Some(range) = {
+  //       use range, c <- list.fold(
+  //         lc,
+  //         Some(Range(#(1, 4000), #(1, 4000), #(1, 4000), #(1, 4000))),
+  //       )
+  //       option.then(range, cut(_, c))
   //     }
-  //     |> list.fold(0, int.add)
 
-  //   case intersecting {
-  //     0 -> acc
-  //     _ -> acc + 1
+  //     acc + range_size(range)
   //   }
+
+  //   case key == "R" || key == "A" {
+  //     True -> Nil
+  //     False -> {
+  //       let assert 256_000_000_000_000 = sum
+  //       Nil
+  //     }
+  //   }
+
+  //   io.debug(sum)
   // }
-
-  // let sum =
-  //   {
-  //     use #(acc, combinations), k <- iterator.fold(
-  //       iterator.range(1, list.length(res)),
-  //       #(0, list.combinations(res, 1)),
-  //     )
-
-  //     let sign = case k % 2 {
-  //       1 -> 1
-  //       0 -> -1
-  //     }
-  //     // let combinations = list.combinations(res, k)
-  //     let mapped =
-  //       combinations
-  //       |> list.map(fn(comb) { 
-  //         io.debug(#(comb, intersection_size(comb)) )
-  //         #(comb, intersection_size(comb)) 
-  //         })
-
-  //     let sum =
-  //       mapped
-  //       |> list.fold(0, fn(acc, c) { acc + c.1 })
-
-  //     let combinations = {
-  //       use #(comb, comb_res) <- list.filter_map(mapped)
-  //       case comb_res {
-  //         0 -> Error(Nil)
-  //         _ -> Ok(comb)
-  //       }
-  //     }
-
-  //     #(acc + sign * sum, recombine(res, combinations))
-  //   }.0
-
-  // let sum =
-  //   res
-  //   |> list.map(range_size)
-  //   |> list.fold(0, int.add)
-
-  // let sum2 =
-  //   res2
-  //   |> list.map(range_size)
-  //   |> list.fold(0, int.add)
-
-  // res
-  // |> list.each(io.debug)
-
-  // io.debug(#(intersecting, sum + sum2))
-
-
-
 
   Nil
 }
