@@ -9,85 +9,100 @@ import gleam/iterator.{Iterator}
 import gleam/option.{type Option, None, Some}
 import gleam/regex
 
-type Range =
-  Set(Int)
+type Range {
+  Range(x: #(Int, Int), m: #(Int, Int), a: #(Int, Int), s: #(Int, Int))
+}
 
-type Ranges {
-  Ranges(x: Range, m: Range, a: Range, s: Range)
+type Comp {
+  Xs
+  Ms
+  As
+  Ss
+}
+
+type Cut {
+  Lt(comp: Comp, n: Int)
+  Gt(comp: Comp, n: Int)
 }
 
 type Place {
-  Place(leads_in: List(String), leads_out: Dict(String, Ranges))
+  Place(leads_in: List(String), leads_out: Dict(String, List(List(Cut))))
 }
 
 type Map =
   Dict(String, Place)
 
-fn union(range: Ranges, other: Ranges) -> Ranges {
-  Ranges(
-    x: set.union(range.x, other.x),
-    m: set.union(range.m, other.m),
-    a: set.union(range.a, other.a),
-    s: set.union(range.s, other.s),
-  )
+fn replace(range: Range, comp: Comp, val: #(Int, Int)) -> Range {
+  case comp {
+    Xs -> Range(..range, x: val)
+    Ms -> Range(..range, m: val)
+    As -> Range(..range, a: val)
+    Ss -> Range(..range, s: val)
+  }
 }
 
-fn intersection(range: Ranges, other: Ranges) -> Ranges {
-  Ranges(
-    x: set.intersection(range.x, other.x),
-    m: set.intersection(range.m, other.m),
-    a: set.intersection(range.a, other.a),
-    s: set.intersection(range.s, other.s),
-  )
+fn cut(range: Range, cut: Cut) -> Option(Range) {
+  let #(a, b) = case cut.comp {
+    Xs -> range.x
+    Ms -> range.m
+    As -> range.a
+    Ss -> range.s
+  }
+
+  case cut {
+    Lt(_, n) ->
+      case n > a, n <= b {
+        False, True -> Some(range)
+        True, False -> None
+        True, True -> Some(replace(range, cut.comp, #(a, n - 1)))
+      }
+    Gt(_, n) ->
+      case n >= a, n < b {
+        False, True -> None
+        True, False -> Some(range)
+        True, True -> Some(replace(range, cut.comp, #(n + 1, b)))
+      }
+  }
 }
 
-fn new_full() -> Ranges {
-  Ranges(
-    x: set.from_list(list.range(1, 4000)),
-    m: set.from_list(list.range(1, 4000)),
-    a: set.from_list(list.range(1, 4000)),
-    s: set.from_list(list.range(1, 4000)),
-  )
-}
-
-fn new_empty() -> Ranges {
-  Ranges(x: set.new(), m: set.new(), a: set.new(), s: set.new())
-}
-
-fn size(ranges: Ranges) -> Int {
-  set.size(ranges.x) + set.size(ranges.m) + set.size(ranges.a) + set.size(
-    ranges.s,
-  )
-}
-
-fn get_target_ranges(conds: String) -> Dict(String, Ranges) {
+fn get_cuts(conds: String) -> Dict(String, List(List(Cut))) {
   {
-    use map, cond <- list.fold(string.split(conds, ","), dict.new())
+    use #(map, negative), cond <- list.fold(
+      string.split(conds, ","),
+      #(dict.new(), []),
+    )
 
     case string.split(cond, ":") {
-      [dest] -> dict.insert(map, dest, new_full())
+      [dest] -> {
+        let llc = result.unwrap(dict.get(map, dest), [])
+        #(dict.insert(map, dest, [negative, ..llc]), [])
+      }
       [c, dest] -> {
-        let dest_ranges = result.unwrap(dict.get(map, dest), new_full())
+        let llc = result.unwrap(dict.get(map, dest), [])
+
         let assert Ok(n) =
-          c
-          |> string.drop_left(2)
+          string.drop_left(c, 2)
           |> int.parse
-        let filter = case string.slice(c, 1, 1) {
-          ">" -> fn(a) { a > n }
-          "<" -> fn(a) { a < n }
+
+        let comp = case string.slice(c, 0, 1) {
+          "x" -> Xs
+          "m" -> Ms
+          "a" -> As
+          "s" -> Ss
         }
 
-        let dest_ranges = case string.slice(c, 0, 1) {
-          "x" -> Ranges(..dest_ranges, x: set.filter(dest_ranges.x, filter))
-          "m" -> Ranges(..dest_ranges, m: set.filter(dest_ranges.m, filter))
-          "a" -> Ranges(..dest_ranges, a: set.filter(dest_ranges.a, filter))
-          "s" -> Ranges(..dest_ranges, s: set.filter(dest_ranges.s, filter))
+        let #(new_cut, inverse_cut) = case string.slice(c, 1, 1) {
+          ">" -> #(Gt(comp, n), Lt(comp, n + 1))
+          "<" -> #(Lt(comp, n), Gt(comp, n - 1))
         }
 
-        dict.insert(map, dest, dest_ranges)
+        #(
+          dict.insert(map, dest, [[new_cut, ..negative], ..llc]),
+          [inverse_cut, ..negative],
+        )
       }
     }
-  }
+  }.0
 }
 
 fn parse(input: String) -> Map {
@@ -103,7 +118,7 @@ fn parse(input: String) -> Map {
       regex.scan(map_re, line)
     let place = result.unwrap(dict.get(map, key), Place([], dict.new()))
 
-    let leads_out = get_target_ranges(conds)
+    let leads_out = get_cuts(conds)
     let map = {
       use map, dest <- list.fold(dict.keys(leads_out), map)
       let dest_place = result.unwrap(dict.get(map, dest), Place([], dict.new()))
@@ -119,72 +134,181 @@ fn parse(input: String) -> Map {
 }
 
 fn use_cache(
-  cache: Dict(String, a),
-  node: String,
-  cont: fn(Nil) -> #(Dict(String, a), a),
-) -> #(Dict(String, a), a) {
+  cache: Dict(k, v),
+  node: k,
+  cont: fn(Dict(k, v)) -> #(Dict(k, v), v),
+) -> #(Dict(k, v), v) {
   case dict.get(cache, node) {
     Ok(res) -> #(cache, res)
     Error(_) -> {
-      let #(cache, res) = cont(Nil)
-      let cache = dict.insert(cache, node, res)
-      #(cache, res)
+      let #(cache, res) = cont(cache)
+      #(dict.insert(cache, node, res), res)
     }
   }
 }
 
-fn evaluate_range(
+fn evaluate_ranges(
   map: Map,
-  cache: Dict(String, Ranges),
+  cache: Dict(String, List(Range)),
   node: String,
-  from: Option(String),
-) -> #(Dict(String, Ranges), Ranges) {
-  use _ <- use_cache(cache, node)
+) -> #(Dict(String, List(Range)), List(Range)) {
+  use cache <- use_cache(cache, node)
   let assert Ok(place) = dict.get(map, node)
 
-  let #(cache, local_range) = case node {
-    "in" -> #(cache, new_full())
+  case node {
+    "in" -> #(cache, [Range(#(1, 4000), #(1, 4000), #(1, 4000), #(1, 4000))])
     _ -> {
-      use #(cache, local_range), lead_in <- list.fold(
-        place.leads_in,
-        #(cache, new_empty()),
-      )
-      let #(cache, sub_range) = evaluate_range(map, cache, lead_in, Some(node))
-      #(cache, union(local_range, sub_range))
-    }
-  }
+      use #(cache, ranges), lead_in <- list.fold(place.leads_in, #(cache, []))
+      let #(cache, sub_ranges) = evaluate_ranges(map, cache, lead_in)
 
-  case from {
-    None -> {
-      io.debug(#(node, size(local_range)))
-      #(cache, local_range)
-    }
-    Some(from) -> {
-      let assert Ok(lead_to_range) = dict.get(place.leads_out, from)
-      let final_range = intersection(local_range, lead_to_range)
-      io.debug(#(
-        node,
-        size(final_range),
-      ))
-      #(cache, final_range)
+      let assert Ok(Place(_, leads)) = dict.get(map, lead_in)
+      let assert Ok(llc) = dict.get(leads, node)
+      let cut_sub_ranges =
+        {
+          use lc <- list.map(llc)
+          {
+            use range <- list.map(sub_ranges)
+            {
+              use range, c <- list.fold(lc, Some(range))
+              option.then(range, cut(_, c))
+            }
+          }
+          |> option.values
+        }
+        |> list.concat
+
+      #(cache, list.append(cut_sub_ranges, ranges))
     }
   }
+}
+
+fn range_size(range: Range) -> Int {
+  let #(x1, x2) = range.x
+  let #(m1, m2) = range.m
+  let #(a1, a2) = range.a
+  let #(s1, s2) = range.s
+
+  { x2 - x1 + 1 } * { m2 - m1 + 1 } * { a2 - a1 + 1 } * { s2 - s1 + 1 }
+}
+
+fn intersection(range: Range, other: Range) -> Range {
+  Range(
+    x: #(int.max(range.x.0, other.x.0), int.min(range.x.1, other.x.1)),
+    m: #(int.max(range.m.0, other.m.0), int.min(range.m.1, other.m.1)),
+    a: #(int.max(range.a.0, other.a.0), int.min(range.a.1, other.a.1)),
+    s: #(int.max(range.s.0, other.s.0), int.min(range.s.1, other.s.1)),
+  )
+}
+
+fn intersection_size(ranges: List(Range)) -> Int {
+  case ranges {
+    [] -> 0
+    [range] -> range_size(range)
+    [first, ..rest] -> {
+      let intersect = list.fold(rest, first, intersection)
+      case
+        intersect.x.0 >= intersect.x.1 || intersect.m.0 >= intersect.m.1 || intersect.a.0 >= intersect.a.1 || intersect.s.0 >= intersect.s.1
+      {
+        True -> 0
+        False -> range_size(intersect)
+      }
+    }
+  }
+}
+
+fn recombine(all: List(a), combinations: List(List(a))) -> List(List(a)) {
+  {
+    use combination <- list.flat_map(combinations)
+    let combination_set = set.from_list(combination)
+
+    let other =
+      all
+      |> list.filter(fn(i) { !set.contains(combination_set, i) })
+
+    {
+      use other_item <- list.map(other)
+      set.insert(combination_set, other_item)
+    }
+  }
+  |> list.unique
+  |> list.map(set.to_list)
 }
 
 pub fn main(input: String) {
   let map = parse(input)
-  io.debug(size(evaluate_range(map, dict.new(), "A", None).1))
-  // map
-  // |> dict.to_list
-  // |> list.each(fn(z) {
-  //   let #(k, p) = z
-  //   io.println_error(k)
-  //   {
-  //     use #(k, v) <- list.each(dict.to_list(p.leads_out))
-  //     io.debug(#(k, size(v)))
+  // let #(_, res) = evaluate_ranges(map, dict.new(), "A")
+  // let #(_, res2) = evaluate_ranges(map, dict.new(), "R")
+
+  // let intersecting = {
+  //   use acc, range <- list.fold(res, 0)
+  //   let intersecting =
+  //     {
+  //       use other <- list.map(res)
+  //       case range == other, intersection_size([range, other]) {
+  //         _, 0 -> 0
+  //         False, _ -> 1
+  //         True, _ -> 0
+  //       }
+  //     }
+  //     |> list.fold(0, int.add)
+
+  //   case intersecting {
+  //     0 -> acc
+  //     _ -> acc + 1
   //   }
-  //   io.println_error("")
-  // })
+  // }
+
+  // let sum =
+  //   {
+  //     use #(acc, combinations), k <- iterator.fold(
+  //       iterator.range(1, list.length(res)),
+  //       #(0, list.combinations(res, 1)),
+  //     )
+
+  //     let sign = case k % 2 {
+  //       1 -> 1
+  //       0 -> -1
+  //     }
+  //     // let combinations = list.combinations(res, k)
+  //     let mapped =
+  //       combinations
+  //       |> list.map(fn(comb) { 
+  //         io.debug(#(comb, intersection_size(comb)) )
+  //         #(comb, intersection_size(comb)) 
+  //         })
+
+  //     let sum =
+  //       mapped
+  //       |> list.fold(0, fn(acc, c) { acc + c.1 })
+
+  //     let combinations = {
+  //       use #(comb, comb_res) <- list.filter_map(mapped)
+  //       case comb_res {
+  //         0 -> Error(Nil)
+  //         _ -> Ok(comb)
+  //       }
+  //     }
+
+  //     #(acc + sign * sum, recombine(res, combinations))
+  //   }.0
+
+  // let sum =
+  //   res
+  //   |> list.map(range_size)
+  //   |> list.fold(0, int.add)
+
+  // let sum2 =
+  //   res2
+  //   |> list.map(range_size)
+  //   |> list.fold(0, int.add)
+
+  // res
+  // |> list.each(io.debug)
+
+  // io.debug(#(intersecting, sum + sum2))
+
+
+
 
   Nil
 }
