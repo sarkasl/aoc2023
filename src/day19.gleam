@@ -1,11 +1,10 @@
-import gleam/list.{Continue, Stop}
+import gleam/list
 import gleam/string
 import gleam/io
 import gleam/int
 import gleam/dict.{type Dict}
-import gleam/set.{type Set}
+import gleam/set
 import gleam/result
-import gleam/iterator.{Iterator}
 import gleam/option.{type Option, None, Some}
 import gleam/regex
 
